@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>盛世王朝 SHOP BOT · 管理后台</title>
+  <meta name="description" content="Telegram 全自动商铺 Bot 管理后台">
+  <link rel="stylesheet" href="/assets/admin.css">
+</head>
+<body>
+  <section id="login-view" class="login-view">
+    <div class="login-brand">
+      <div class="brand-mark">盛</div>
+      <div>
+        <p class="eyebrow">TELEGRAM COMMERCE</p>
+        <h1>盛世王朝 <span>SHOP BOT</span></h1>
+        <p class="login-intro">一套后台，掌控商品、支付、履约与客服。</p>
+      </div>
+    </div>
+    <form id="login-form" class="login-card">
+      <div class="login-card-head">
+        <span class="pulse-dot"></span>
+        <span>管理员入口</span>
+      </div>
+      <label class="field">
+        <span>账号</span>
+        <input name="username" autocomplete="username" value="admin" required maxlength="80">
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input name="password" type="password" autocomplete="current-password" required maxlength="128" placeholder="输入后台密码">
+      </label>
+      <p id="login-error" class="form-error" aria-live="polite"></p>
+      <button class="btn btn-primary btn-block" type="submit">进入控制台 <span>→</span></button>
+      <p class="login-hint">首次登录信息位于程序运行目录的 login.txt</p>
+    </form>
+  </section>
+
+  <div id="app-shell" class="app-shell hidden">
+    <aside class="sidebar">
+      <a class="sidebar-brand" href="#dashboard" aria-label="返回后台首页">
+        <div class="brand-mark small">盛</div>
+        <div><strong>SHOP BOT</strong><span>全自动商铺</span></div>
+      </a>
+      <nav class="nav" aria-label="后台功能">
+        <button data-route="dashboard"><span class="nav-icon">⌂</span><span>后台首页</span></button>
+        <button data-route="categories"><span class="nav-icon">◫</span><span>分类列表</span></button>
+        <button data-route="products"><span class="nav-icon">◇</span><span>商品列表</span></button>
+        <button data-route="orders"><span class="nav-icon">≡</span><span>订单列表</span><b id="pending-badge" class="nav-badge hidden"></b></button>
+        <button data-route="support"><span class="nav-icon">◌</span><span>客服系统</span><b id="support-badge" class="nav-badge hidden"></b></button>
+        <button data-route="payments"><span class="nav-icon">◈</span><span>支付通道</span></button>
+        <button data-route="broadcast"><span class="nav-icon">⌁</span><span>广播通知</span></button>
+        <button data-route="settings"><span class="nav-icon">⚙</span><span>系统设置</span></button>
+      </nav>
+      <div class="sidebar-foot">
+        <div id="bot-status-card" class="bot-status-card">
+          <span class="status-light"></span>
+          <div><strong>Bot 状态</strong><span>正在检测…</span></div>
+        </div>
+        <p>SSWC SHOP · v1.0.0</p>
+      </div>
+    </aside>
+
+    <div class="workspace">
+      <header class="topbar">
+        <button id="mobile-menu" class="icon-btn mobile-only" aria-label="打开菜单">☰</button>
+        <div>
+          <p class="eyebrow">CONTROL CENTER</p>
+          <h2 id="page-title">后台首页</h2>
+        </div>
+        <div class="topbar-actions">
+          <div class="clock"><span class="pulse-dot"></span><span id="clock-text"></span></div>
+          <button id="theme-btn" class="btn btn-quiet" type="button" aria-label="切换后台明暗主题">☀ 浅色</button>
+          <button id="password-btn" class="btn btn-quiet">修改密码</button>
+          <button id="logout-btn" class="icon-btn danger" title="退出登录" aria-label="退出登录">↪</button>
+        </div>
+      </header>
+      <main id="page" class="page" aria-live="polite"></main>
+    </div>
+  </div>
+
+  <div id="modal-root"></div>
+  <div id="toast-root" class="toast-root" aria-live="polite"></div>
+  <script src="/assets/admin.js" defer></script>
+</body>
+</html>

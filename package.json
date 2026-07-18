@@ -1,0 +1,26 @@
+{
+  "name": "sswc-telegram-shop-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Telegram 全自动商铺 Bot 与单管理员 Web 管理面板",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --test --test-concurrency=1",
+    "check": "node --check src/index.js && node --check src/auth.js && node --check src/bot.js && node --check src/constants.js && node --check src/db.js && node --check src/orders.js && node --check src/payments.js && node --check src/server.js && node --check src/sqlite.js && node --check src/telegram.js && node --check src/utils.js && node --check public/admin.js"
+  },
+  "dependencies": {
+    "bcryptjs": "3.0.2",
+    "compression": "1.8.1",
+    "express": "4.22.2",
+    "helmet": "8.1.0",
+    "multer": "2.2.0",
+    "qrcode": "1.5.4",
+    "sql.js": "1.13.0"
+  }
+}
