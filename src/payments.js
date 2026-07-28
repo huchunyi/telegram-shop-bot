@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const net = require('net');
 const { PAYMENT_MODES, ORDER_STATUS, USDT_TRC20_CONTRACT } = require('./constants');
 const { round, truncate } = require('./utils');
 
@@ -115,8 +116,41 @@ function callbackUrl(settings, route) {
   return `${callbackBase(settings)}/${String(route || '').replace(/^\/+/, '')}`;
 }
 
+function epayClientIp(settings) {
+  try {
+    const hostname = new URL(callbackBase(settings)).hostname.replace(/^\[|\]$/g, '');
+    if (net.isIP(hostname)) return hostname;
+  } catch {}
+  // Telegram Bot API 不提供客户 IP。域名部署时使用回环地址满足通用易支付接口的必填格式。
+  return '127.0.0.1';
+}
+
+function resolveHttpUrl(value, base) {
+  const candidate = String(value || '').trim();
+  if (!candidate) return '';
+  try {
+    const url = new URL(candidate, base);
+    return ['http:', 'https:'].includes(url.protocol) ? url.toString() : '';
+  } catch {
+    return '';
+  }
+}
+
 function centsEqual(a, b) {
   return Math.abs(Number(a) - Number(b)) < 0.005;
+}
+
+function parseUsdtTransfer(tx, targetAddress) {
+  if (!tx || String(tx.type || '').trim().toLowerCase() !== 'transfer') return null;
+  if (String(tx.token_info?.address || '') !== USDT_TRC20_CONTRACT) return null;
+  if (String(tx.to || '') !== String(targetAddress || '')) return null;
+  const decimals = Number(tx.token_info?.decimals);
+  if (decimals !== 6) return null;
+  const amount = Number(tx.value) / 10 ** decimals;
+  const transactionId = String(tx.transaction_id || '');
+  const blockTimestamp = Number(tx.block_timestamp);
+  if (!transactionId || !Number.isFinite(amount) || amount <= 0 || !Number.isFinite(blockTimestamp) || blockTimestamp <= 0) return null;
+  return { amount, transactionId, blockTimestamp };
 }
 
 class PaymentService {
@@ -207,14 +241,37 @@ class PaymentService {
         return_url: botUsername ? `https://t.me/${botUsername}` : callbackBase(settings),
         name: order.product_name.slice(0, 60),
         money: Number(order.payable_amount).toFixed(2),
+        clientip: epayClientIp(settings),
+        device: 'mobile',
         param: order.order_no
       };
       data.sign = signEpay(data, config.key);
       data.sign_type = 'MD5';
-      const payUrl = `${base}submit.php?${new URLSearchParams(data).toString()}`;
-      this.db.prepare('UPDATE orders SET pay_url = ?, updated_at = ? WHERE id = ?')
-        .run(payUrl, this.store.nowIso(), order.id);
-      return { mode: channel.mode, payUrl, amount: order.payable_amount, currency: 'CNY' };
+      const response = await fetchWithTimeout(`${base}mapi.php`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded;charset=UTF-8',
+          accept: 'application/json'
+        },
+        body: new URLSearchParams(data)
+      });
+      const payload = await readJsonResponse(response);
+      const result = payload?.data && typeof payload.data === 'object' ? payload.data : payload;
+      const code = Number(payload.code ?? result.code);
+      if (code !== 1) {
+        throw new Error(`易支付创建订单失败：${truncate(payload.msg || result.msg || JSON.stringify(payload), 500)}`);
+      }
+
+      // mapi.php 正常返回 payurl；部分兼容实现会将 HTTP 二维码链接放在 qrcode 中。
+      // 只把支付服务商返回的 HTTP(S) 地址发给客户，绝不回传创建订单时的签名参数。
+      const payUrl = resolveHttpUrl(result.payurl || result.pay_url || result.qrcode, base);
+      if (!payUrl) {
+        throw new Error(`易支付未返回可用的支付链接：${truncate(JSON.stringify(payload), 500)}`);
+      }
+      const externalOrderId = String(result.trade_no || payload.trade_no || '') || null;
+      this.db.prepare('UPDATE orders SET external_order_id = ?, pay_url = ?, updated_at = ? WHERE id = ?')
+        .run(externalOrderId, payUrl, this.store.nowIso(), order.id);
+      return { mode: channel.mode, payUrl, externalOrderId, amount: order.payable_amount, currency: 'CNY' };
     }
 
     throw new Error('未知支付通道模式');
@@ -345,18 +402,16 @@ class PaymentService {
         const response = await fetchWithTimeout(url, { headers }, 15_000);
         const payload = await readJsonResponse(response);
         for (const tx of payload.data || []) {
-          const tokenAddress = tx.token_info?.address;
-          if (tokenAddress !== USDT_TRC20_CONTRACT || String(tx.to || '') !== target.address) continue;
-          const decimals = Number(tx.token_info?.decimals ?? 6);
-          const amount = Number(tx.value) / 10 ** decimals;
-          if (!Number.isFinite(amount) || amount <= 0) continue;
-          const txId = String(tx.transaction_id || '');
-          if (!txId) continue;
+          const transfer = parseUsdtTransfer(tx, target.address);
+          if (!transfer) continue;
+          const { amount, transactionId: txId, blockTimestamp } = transfer;
           const recorded = this.db.prepare('SELECT order_id FROM trc20_transfers WHERE transaction_id = ?').get(txId);
           if (recorded?.order_id) continue;
 
           const order = addressOrders.find((item) => item.payment_status === 'unpaid'
-            && Math.abs(Number(item.payable_amount) - amount) < 0.0000001);
+            && Math.abs(Number(item.payable_amount) - amount) < 0.0000001
+            && blockTimestamp >= new Date(item.created_at).getTime()
+            && blockTimestamp <= new Date(item.expires_at).getTime());
           const channelId = order?.payment_channel_id || target.channelId || null;
           if (recorded) {
             this.db.prepare(`UPDATE trc20_transfers SET channel_id = ?, order_id = ? WHERE transaction_id = ?`)
@@ -438,10 +493,13 @@ module.exports = {
   callbackBase,
   callbackUrl,
   centsEqual,
+  epayClientIp,
   fetchWithTimeout,
   flattenPhpStyle,
   normalizeOkpayPayload,
   parseConfig,
+  parseUsdtTransfer,
+  resolveHttpUrl,
   signEpay,
   signOkpay,
   signOkpayCallback
